@@ -1,2 +1,2 @@
-# plugin-starter
-ikaros plugin starter template
+# plugin-jellyfin
+ikaros jellyfin plugin.
