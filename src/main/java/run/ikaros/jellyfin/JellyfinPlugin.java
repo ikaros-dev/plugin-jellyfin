@@ -31,14 +31,14 @@ public class JellyfinPlugin extends BasePlugin implements ApplicationContextAwar
     public void start() {
         MediaDirInit mediaDirInit = applicationContext.getBean(MediaDirInit.class);
         mediaDirDisposable = mediaDirInit.generate();
-        log.info("start generate jellyfin media subject dirs of 5 minutes ...");
+        log.info("start generate jellyfin media subject dirs of 15 minutes ...");
     }
 
     @Override
     public void stop() {
         if(mediaDirDisposable != null) {
             mediaDirDisposable.dispose();
-            log.info("stop generate jellyfin media subject dirs of 5 minutes ...");
+            log.info("stop generate jellyfin media subject dirs of 15 minutes ...");
         }
     }
 }

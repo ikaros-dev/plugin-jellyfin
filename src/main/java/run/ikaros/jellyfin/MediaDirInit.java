@@ -44,7 +44,7 @@ public class MediaDirInit {
 
     // @EventListener(ApplicationReadyEvent.class)
     public Disposable generate() {
-        return Flux.interval(Duration.ofMinutes(30))
+        return Flux.interval(Duration.ofMinutes(15))
             .doOnEach(tick -> generateJellyfinMediaDirAndFiles())
             .subscribe();
     }
@@ -86,17 +86,22 @@ public class MediaDirInit {
 
         // generate tvshow.nfo file.
         File tvShowFile = subjectDirPath.resolve("tvshow.nfo").toFile();
-        if (!tvShowFile.exists()) {
-            try {
-                XmlUtils.generateJellyfinTvShowNfoXml(tvShowFile.getAbsolutePath(),
-                    subject.getSummary(), subject.getNameCn(),
-                    subject.getName(),
-                    bgmTvIdOp.orElse(""));
-            } catch (Exception e) {
-                log.warn("create tv show file fail, skip current subject:[{}]. ",
-                    subject.getName(), e);
-                return;
-            }
+        if (tvShowFile.exists()) {
+            tvShowFile.delete();
+            log.info("delete subject:[{}] tv show file:[{}].", subject.getName(),
+                tvShowFile.getAbsolutePath());
+        }
+        try {
+            XmlUtils.generateJellyfinTvShowNfoXml(tvShowFile.getAbsolutePath(),
+                subject.getSummary(), subject.getNameCn(),
+                subject.getName(),
+                bgmTvIdOp.orElse(""));
+            log.info("create subject:[{}] tv show file:[{}].", subject.getName(),
+                tvShowFile.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("create tv show file fail, skip current subject:[{}]. ",
+                subject.getName(), e);
+            return;
         }
 
         // generate cover img file.
@@ -118,7 +123,7 @@ public class MediaDirInit {
                 try {
                     if (!posterFile.exists()) {
                         Files.createLink(posterFile.toPath(), coverFile.toPath());
-                        log.warn(
+                        log.info(
                             "create jellyfin poster.jpg hard link success, link={}, existing={}",
                             posterFilePath, coverAbsolutePath);
                     }
@@ -167,7 +172,7 @@ public class MediaDirInit {
             try {
                 if (!targetEpisodeFile.exists()) {
                     Files.createLink(targetEpisodeFile.toPath(), episodeFile.toPath());
-                    log.warn(
+                    log.info(
                         "create jellyfin episode hard link success, link={}, existing={}",
                         targetEpisodeFile.getAbsolutePath(), epFileAbsolutePath);
                 }
@@ -181,14 +186,19 @@ public class MediaDirInit {
                 subjectDirPath.resolve(
                         originalFileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo")
                     .toFile();
-            if (!episodeNfoFile.exists()) {
-                XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
-                    episode.getDescription(),
-                    StringUtils.hasText(episode.getNameCn()) ? episode.getNameCn() :
-                        episode.getName(),
-                    "1",
-                    String.valueOf(episode.getSequence()), bgmTvIdOp.orElse(""));
+            if (episodeNfoFile.exists()) {
+                episodeNfoFile.delete();
+                log.info("delete episode nfo file, episode:[{}], nfo file path:[{}].",
+                    episode.getName(), episodeNfoFile.getAbsolutePath());
             }
+            XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
+                episode.getDescription(),
+                StringUtils.hasText(episode.getNameCn()) ? episode.getNameCn() :
+                    episode.getName(),
+                "1",
+                String.valueOf(episode.getSequence()), bgmTvIdOp.orElse(""));
+            log.info("create episode nfo file, episode:[{}], nfo file path:[{}].",
+                episode.getName(), episodeNfoFile.getAbsolutePath());
         }
     }
 
