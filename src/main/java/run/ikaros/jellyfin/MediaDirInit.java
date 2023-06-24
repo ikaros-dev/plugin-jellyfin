@@ -47,7 +47,7 @@ public class MediaDirInit {
 
     // @EventListener(ApplicationReadyEvent.class)
     public Disposable generate() {
-        return Flux.interval(Duration.ofMinutes(15))
+        return Flux.interval(Duration.ofSeconds(15))
             .doOnEach(tick -> generateJellyfinMediaDirAndFiles())
             .subscribe();
     }
@@ -193,13 +193,14 @@ public class MediaDirInit {
             File episodeNfoFile =
                 new File(subjectDirAbsolutePath + File.separatorChar
                     + originalFileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo");
+            Double sequence = episode.getSequence();
             if (!episodeNfoFile.exists()) {
                 XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
                     episode.getDescription(),
                     StringUtils.hasText(episode.getNameCn()) ? episode.getNameCn() :
                         episode.getName(),
-                    "1",
-                    String.valueOf(episode.getSequence()), bgmTvIdOp.orElse(""));
+                    DoubleUtils.isInt(sequence) ? "1" : "0",
+                    String.valueOf(DoubleUtils.castInt(sequence)), bgmTvIdOp.orElse(""));
                 log.debug("create episode nfo file, episode:[{}], nfo file path:[{}].",
                     episode.getName(), episodeNfoFile.getAbsolutePath());
             }

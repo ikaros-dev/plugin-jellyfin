@@ -55,7 +55,7 @@ public class XmlUtils {
         originaltitleElement.setTextContent(originalTitle);
         tvshowElement.appendChild(originaltitleElement);
 
-        Element bangumiidElement = document.createElement("subjectId");
+        Element bangumiidElement = document.createElement("bangumiid");
         bangumiidElement.setTextContent(subjectId);
         tvshowElement.appendChild(bangumiidElement);
 
@@ -119,7 +119,7 @@ public class XmlUtils {
         episodeElement.setTextContent(episode);
         tvshowElement.appendChild(episodeElement);
 
-        Element bangumiidElement = document.createElement("subjectId");
+        Element bangumiidElement = document.createElement("bangumiid");
         bangumiidElement.setTextContent(subjectId);
         tvshowElement.appendChild(bangumiidElement);
 
