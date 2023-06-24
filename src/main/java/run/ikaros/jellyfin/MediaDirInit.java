@@ -18,7 +18,6 @@ import run.ikaros.api.wrap.PagingWrap;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,12 +32,14 @@ public class MediaDirInit {
     private final SubjectOperate subjectOperate;
     private final FileOperate fileOperate;
     private final IkarosProperties ikarosProperties;
+    private final String workDirAbsolutePath;
 
     public MediaDirInit(SubjectOperate subjectOperate, FileOperate fileOperate,
                         IkarosProperties ikarosProperties) {
         this.subjectOperate = subjectOperate;
         this.fileOperate = fileOperate;
         this.ikarosProperties = ikarosProperties;
+        workDirAbsolutePath = ikarosProperties.getWorkDir().toFile().getAbsolutePath();
     }
 
 
@@ -50,17 +51,22 @@ public class MediaDirInit {
     }
 
     private void generateJellyfinMediaDirAndFiles() {
-        Path workDir = ikarosProperties.getWorkDir();
-        Path mediaDirPath = workDir.resolve(MEDIA_DIR_NAME);
+        String mediaDirAbsolutePath = workDirAbsolutePath + File.separatorChar + MEDIA_DIR_NAME;
         PagingWrap<Subject> pagingWrap = new PagingWrap<>(1, 9999, 0, null);
 
+        File mediaDir = new File(mediaDirAbsolutePath);
+        if (!mediaDir.exists()) {
+            mediaDir.mkdirs();
+            log.debug("create media dir in path: [{}].", mediaDirAbsolutePath);
+        }
+
         subjectOperate.findAllByPageable(pagingWrap)
-            .doOnEach(subjectSignal -> handleSubject(subjectSignal, mediaDirPath))
+            .doOnEach(subjectSignal -> handleSubject(subjectSignal, mediaDirAbsolutePath))
             .subscribeOn(Schedulers.boundedElastic())
             .subscribe();
     }
 
-    private void handleSubject(Signal<Subject> subjectSignal, Path mediaDirPath) {
+    private void handleSubject(Signal<Subject> subjectSignal, String mediaDirAbsolutePath) {
         Subject subject = subjectSignal.get();
         if (subject == null) {
             return;
@@ -78,17 +84,20 @@ public class MediaDirInit {
             .findFirst();
 
         // generate subject dir.
-        Path subjectDirPath = mediaDirPath.resolve(buildMediaAnimeDirName(subject));
-        File subjectDirFile = subjectDirPath.toFile();
+        String subjectDirAbsolutePath = mediaDirAbsolutePath +
+            File.separatorChar + buildMediaAnimeDirName(subject);
+        File subjectDirFile = new File(subjectDirAbsolutePath);
         if (!subjectDirFile.exists()) {
             subjectDirFile.mkdirs();
+            log.debug("create subject dir in path: [{}].", subjectDirAbsolutePath);
         }
 
         // generate tvshow.nfo file.
-        File tvShowFile = subjectDirPath.resolve("tvshow.nfo").toFile();
+        File tvShowFile = new File(subjectDirAbsolutePath
+            + File.separatorChar + "tvshow.nfo");
         if (tvShowFile.exists()) {
             tvShowFile.delete();
-            log.info("delete subject:[{}] tv show file:[{}].", subject.getName(),
+            log.debug("delete subject:[{}] tv show file:[{}].", subject.getName(),
                 tvShowFile.getAbsolutePath());
         }
         try {
@@ -96,7 +105,7 @@ public class MediaDirInit {
                 subject.getSummary(), subject.getNameCn(),
                 subject.getName(),
                 bgmTvIdOp.orElse(""));
-            log.info("create subject:[{}] tv show file:[{}].", subject.getName(),
+            log.debug("create subject:[{}] tv show file:[{}].", subject.getName(),
                 tvShowFile.getAbsolutePath());
         } catch (Exception e) {
             log.warn("create tv show file fail, skip current subject:[{}]. ",
@@ -105,15 +114,13 @@ public class MediaDirInit {
         }
 
         // generate cover img file.
-        Path workDir = ikarosProperties.getWorkDir();
-        String workDirAbsolutePath = workDir.toFile().getAbsolutePath();
         String coverAbsolutePath = workDirAbsolutePath +
             (subject.getCover().startsWith("/") ? subject.getCover() : "/" + subject.getCover());
         File coverFile = new File(coverAbsolutePath);
         if (coverFile.exists()) {
             String postfix = FileUtils.parseFilePostfix(coverAbsolutePath);
-            String posterFilePath = subjectDirPath.toFile().getAbsolutePath()
-                + File.separator
+            String posterFilePath = subjectDirAbsolutePath
+                + File.separatorChar
                 + "poster"
                 + (StringUtils.hasText(postfix)
                 ? (postfix.startsWith(".") ? postfix : "." + postfix)
@@ -123,7 +130,7 @@ public class MediaDirInit {
                 try {
                     if (!posterFile.exists()) {
                         Files.createLink(posterFile.toPath(), coverFile.toPath());
-                        log.info(
+                        log.debug(
                             "create jellyfin poster.jpg hard link success, link={}, existing={}",
                             posterFilePath, coverAbsolutePath);
                     }
@@ -144,14 +151,14 @@ public class MediaDirInit {
             EpisodeResource episodeResource = episode.getResources().get(0);
             Long fileId = episodeResource.getFileId();
             fileOperate.findById(fileId).subscribe(fileEntity ->
-                linkEpisodeFileAndGenerateNfo(bgmTvIdOp, subjectDirPath,
+                linkEpisodeFileAndGenerateNfo(bgmTvIdOp, subjectDirAbsolutePath,
                     workDirAbsolutePath, episode, fileEntity));
 
         }
     }
 
     private static void linkEpisodeFileAndGenerateNfo(Optional<String> bgmTvIdOp,
-                                                      Path subjectDirPath,
+                                                      String subjectDirAbsolutePath,
                                                       String workDirAbsolutePath,
                                                       Episode episode,
                                                       FileEntity fileEntity) {
@@ -168,11 +175,12 @@ public class MediaDirInit {
         File episodeFile = new File(epFileAbsolutePath);
         if (episodeFile.exists()) {
             // link episode file
-            File targetEpisodeFile = subjectDirPath.resolve(originalFileName).toFile();
+            File targetEpisodeFile =
+                new File(subjectDirAbsolutePath + File.separatorChar + originalFileName);
             try {
                 if (!targetEpisodeFile.exists()) {
                     Files.createLink(targetEpisodeFile.toPath(), episodeFile.toPath());
-                    log.info(
+                    log.debug(
                         "create jellyfin episode hard link success, link={}, existing={}",
                         targetEpisodeFile.getAbsolutePath(), epFileAbsolutePath);
                 }
@@ -183,12 +191,11 @@ public class MediaDirInit {
             }
             // generate nfo file
             File episodeNfoFile =
-                subjectDirPath.resolve(
-                        originalFileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo")
-                    .toFile();
+                new File(subjectDirAbsolutePath + File.separatorChar
+                    + originalFileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo");
             if (episodeNfoFile.exists()) {
                 episodeNfoFile.delete();
-                log.info("delete episode nfo file, episode:[{}], nfo file path:[{}].",
+                log.debug("delete episode nfo file, episode:[{}], nfo file path:[{}].",
                     episode.getName(), episodeNfoFile.getAbsolutePath());
             }
             XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
@@ -197,7 +204,7 @@ public class MediaDirInit {
                     episode.getName(),
                 "1",
                 String.valueOf(episode.getSequence()), bgmTvIdOp.orElse(""));
-            log.info("create episode nfo file, episode:[{}], nfo file path:[{}].",
+            log.debug("create episode nfo file, episode:[{}], nfo file path:[{}].",
                 episode.getName(), episodeNfoFile.getAbsolutePath());
         }
     }
@@ -219,11 +226,28 @@ public class MediaDirInit {
         if (airTime != null) {
             date = airTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         }
-        return StringUtils.hasText(nameCn) ? nameCn : " - "
-            + name +
-            " (" +
-            date +
-            ")";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(nameCn)
+            .append(StringUtils.hasText(nameCn) ? " - " : "")
+            .append(name)
+            .append(" (")
+            .append(date)
+            .append(")");
+        String fileEncode = System.getProperty("file.encoding");
+        log.debug("current system fileEncode: {}", fileEncode);
+
+        return sb.toString()
+            .replace(":", "")
+            .replace("/", "")
+            .replace("\\", "")
+            .replace("*", "")
+            .replace("?", "")
+            .replace("\"", "")
+            .replace("<", "")
+            .replace(">", "")
+            .replace(">", "")
+            .replace("|", "");
     }
 
 }
