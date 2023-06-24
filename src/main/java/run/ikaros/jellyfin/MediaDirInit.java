@@ -47,7 +47,7 @@ public class MediaDirInit {
 
     // @EventListener(ApplicationReadyEvent.class)
     public Disposable generate() {
-        return Flux.interval(Duration.ofSeconds(15))
+        return Flux.interval(Duration.ofMinutes(15))
             .doOnEach(tick -> generateJellyfinMediaDirAndFiles())
             .subscribe();
     }
