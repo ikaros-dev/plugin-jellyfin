@@ -11,7 +11,6 @@ import run.ikaros.api.core.file.FileOperate;
 import run.ikaros.api.core.subject.*;
 import run.ikaros.api.infra.properties.IkarosProperties;
 import run.ikaros.api.infra.utils.FileUtils;
-import run.ikaros.api.store.entity.FileEntity;
 import run.ikaros.api.store.enums.FileType;
 import run.ikaros.api.store.enums.SubjectSyncPlatform;
 import run.ikaros.api.wrap.PagingWrap;
@@ -24,7 +23,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -150,9 +148,9 @@ public class MediaDirInit {
             }
             EpisodeResource episodeResource = episode.getResources().get(0);
             Long fileId = episodeResource.getFileId();
-            fileOperate.findById(fileId).subscribe(fileEntity ->
+            fileOperate.findById(fileId).subscribe(file ->
                 linkEpisodeFileAndGenerateNfo(bgmTvIdOp, subjectDirAbsolutePath,
-                    workDirAbsolutePath, episode, fileEntity));
+                    workDirAbsolutePath, episode, file));
 
         }
     }
@@ -161,14 +159,14 @@ public class MediaDirInit {
                                                String subjectDirAbsolutePath,
                                                String workDirAbsolutePath,
                                                Episode episode,
-                                               FileEntity fileEntity) {
-        if (fileEntity == null) {
+                                               run.ikaros.api.core.file.File file) {
+        if (file == null) {
             log.warn("skip operate, file entity is null for episode: [{}].",
                 episode.getName());
             return;
         }
-        String originalFileName = fileEntity.getOriginalName();
-        String epUrl = fileEntity.getUrl();
+        String originalFileName = file.getOriginalName();
+        String epUrl = file.getUrl();
 
         String epFileAbsolutePath =
             workDirAbsolutePath + (epUrl.startsWith("/") ? epUrl : "/" + epUrl);
@@ -206,7 +204,8 @@ public class MediaDirInit {
             }
 
             // link ass file if exists
-            String originalFileNameWithNoPostfix = originalFileName.substring(0, originalFileName.indexOf("."));
+            String originalFileNameWithNoPostfix =
+                originalFileName.substring(0, originalFileName.indexOf("."));
             log.debug("originalFileNameWithNoPostfix: {}", originalFileNameWithNoPostfix);
             fileOperate.findAllByOriginalNameLikeAndType(originalFileNameWithNoPostfix,
                     FileType.DOCUMENT)
