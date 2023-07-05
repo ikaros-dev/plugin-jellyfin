@@ -174,16 +174,21 @@ public class MediaDirInit {
                 episode.getName());
             return;
         }
-        String originalFileName = file.getOriginalName();
-        String epUrl = file.getUrl();
+        String fileName = file.getName();
 
-        String epFileAbsolutePath =
-            workDirAbsolutePath + (epUrl.startsWith("/") ? epUrl : "/" + epUrl);
+        String epFileAbsolutePath = file.getFsPath();
+        if(epFileAbsolutePath == null) {
+            log.warn("skip link episode file, episode file path is null for file: {}", file);
+            return;
+        }
         File episodeFile = new File(epFileAbsolutePath);
+        File targetEpisodeFile =
+            new File(subjectDirAbsolutePath + File.separatorChar + fileName);
+        File episodeNfoFile =
+            new File(subjectDirAbsolutePath + File.separatorChar
+                + fileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo");
         if (episodeFile.exists()) {
             // link episode file
-            File targetEpisodeFile =
-                new File(subjectDirAbsolutePath + File.separatorChar + originalFileName);
             try {
                 if (!targetEpisodeFile.exists()) {
                     Files.createLink(targetEpisodeFile.toPath(), episodeFile.toPath());
@@ -197,10 +202,7 @@ public class MediaDirInit {
                     targetEpisodeFile.getAbsolutePath(), epFileAbsolutePath, e);
             }
             // generate nfo file
-            File episodeNfoFile =
-                new File(subjectDirAbsolutePath + File.separatorChar
-                    + originalFileName.replaceAll(RegexConst.FILE_POSTFIX, "") + ".nfo");
-            Double sequence = episode.getSequence();
+           Double sequence = episode.getSequence();
             if (!episodeNfoFile.exists()) {
                 XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
                     episode.getDescription(),
@@ -214,47 +216,53 @@ public class MediaDirInit {
 
             // link ass file if exists
             String originalFileNameWithNoPostfix =
-                originalFileName.substring(0, originalFileName.indexOf("."));
+                fileName.substring(0, fileName.indexOf("."));
             log.debug("originalFileNameWithNoPostfix: {}", originalFileNameWithNoPostfix);
-            fileOperate.findAllByOriginalNameLikeAndType(originalFileNameWithNoPostfix,
+            fileOperate.findAllByNameLikeAndType(originalFileNameWithNoPostfix,
                     FileType.DOCUMENT)
                 .filter(
                     entity -> {
-                        String originalName = entity.getOriginalName();
-                        String postfix = originalName.substring(originalName.indexOf(".") + 1);
+                        String fileEntityName = entity.getName();
+                        String postfix = fileEntityName.substring(fileEntityName.indexOf(".") + 1);
                         boolean result = postfix.endsWith("ass");
-                        log.debug("originalName: [{}], postfix: [{}], end with ass: [{}].",
-                            originalName, postfix, result);
+                        log.debug("fileEntityName: [{}], postfix: [{}], end with ass: [{}].",
+                            fileEntityName, postfix, result);
                         return result;
                     })
                 .subscribe(entity -> {
-                    String assUrl = entity.getUrl();
-                    log.debug("ass file url: {}", assUrl);
-                    if (StringUtils.hasText(assUrl)) {
-                        String assAbsolutePath
-                            =
-                            workDirAbsolutePath + (assUrl.startsWith("/") ? assUrl : "/" + assUrl);
-                        File assFile = new File(assAbsolutePath);
+                    String fsPath = entity.getFsPath();
+                    log.debug("ass file file system path: {}", fsPath);
+                    if (StringUtils.hasText(fsPath)) {
+                        File assFile = new File(fsPath);
                         log.debug("ass file exists: {}", assFile.exists());
                         if (assFile.exists()) {
                             File targetAssFile = new File(subjectDirAbsolutePath
-                                + File.separatorChar + entity.getOriginalName());
+                                + File.separatorChar + entity.getName());
                             try {
                                 log.debug("targetAssFile exists: {}.", targetAssFile.exists());
                                 if (!targetAssFile.exists()) {
                                     Files.createLink(targetAssFile.toPath(), assFile.toPath());
                                     log.debug("create jellyfin episode subtitle hard link success, "
                                             + "link={}, existing={}",
-                                        targetAssFile.getAbsolutePath(), assAbsolutePath);
+                                        targetAssFile.getAbsolutePath(), fsPath);
                                 }
                             } catch (IOException e) {
                                 log.debug("create jellyfin episode subtitle hard link fail, "
                                         + "link={}, existing={}",
-                                    targetAssFile.getAbsolutePath(), assAbsolutePath, e);
+                                    targetAssFile.getAbsolutePath(), fsPath, e);
                             }
                         }
                     }
                 });
+        } else {
+            // 剧集文件不存在，可能是已经推送到了远端
+            // 如果此时媒体目录的剧集文件和nfo文件存在，则删除
+            if(targetEpisodeFile.exists()) {
+                targetEpisodeFile.delete();
+            }
+            if(episodeNfoFile.exists()) {
+                episodeNfoFile.delete();
+            }
         }
     }
 
