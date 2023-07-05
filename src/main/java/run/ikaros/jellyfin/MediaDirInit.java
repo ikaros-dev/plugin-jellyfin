@@ -52,6 +52,8 @@ public class MediaDirInit {
 
     private void generateJellyfinMediaDirAndFiles() {
         String mediaDirAbsolutePath = workDirAbsolutePath + File.separatorChar + MEDIA_DIR_NAME;
+        String nsfwMediaDirAbsolutePath = mediaDirAbsolutePath + File.separatorChar + "nsfw";
+        String normalMediaDirAbsolutePath = mediaDirAbsolutePath + File.separatorChar + "normal";
         PagingWrap<Subject> pagingWrap = new PagingWrap<>(1, 9999, 0, null);
 
         File mediaDir = new File(mediaDirAbsolutePath);
@@ -61,7 +63,14 @@ public class MediaDirInit {
         }
 
         subjectOperate.findAllByPageable(pagingWrap)
-            .doOnEach(subjectSignal -> handleSubject(subjectSignal, mediaDirAbsolutePath))
+            .doOnEach(subjectSignal -> {
+                Subject subject = subjectSignal.get();
+                if (subject == null) {
+                    return;
+                }
+                handleSubject(subjectSignal,
+                    subject.getNsfw() ? nsfwMediaDirAbsolutePath : normalMediaDirAbsolutePath);
+            })
             .subscribeOn(Schedulers.boundedElastic())
             .subscribe();
     }
