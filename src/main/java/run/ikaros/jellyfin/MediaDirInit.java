@@ -11,6 +11,7 @@ import run.ikaros.api.core.file.FileOperate;
 import run.ikaros.api.core.subject.*;
 import run.ikaros.api.infra.properties.IkarosProperties;
 import run.ikaros.api.infra.utils.FileUtils;
+import run.ikaros.api.store.enums.EpisodeGroup;
 import run.ikaros.api.store.enums.FileType;
 import run.ikaros.api.store.enums.SubjectSyncPlatform;
 import run.ikaros.api.wrap.PagingWrap;
@@ -202,13 +203,13 @@ public class MediaDirInit {
                     targetEpisodeFile.getAbsolutePath(), epFileAbsolutePath, e);
             }
             // generate nfo file
-           Double sequence = episode.getSequence();
+           Integer sequence = episode.getSequence();
             if (!episodeNfoFile.exists()) {
                 XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
                     episode.getDescription(),
                     StringUtils.hasText(episode.getNameCn()) ? episode.getNameCn() :
                         episode.getName(),
-                    DoubleUtils.isInt(sequence) ? "1" : "0",
+                    EpisodeGroup.MAIN.name().equalsIgnoreCase(episode.getGroup()) ? "1" : "0",
                     String.valueOf(DoubleUtils.castInt(sequence)), bgmTvIdOp.orElse(""));
                 log.debug("create episode nfo file, episode:[{}], nfo file path:[{}].",
                     episode.getName(), episodeNfoFile.getAbsolutePath());
