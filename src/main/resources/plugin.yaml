@@ -4,7 +4,7 @@ name: PluginJellyfin
 # plugin entry class that extends BasePlugin
 clazz: run.ikaros.jellyfin.JellyfinPlugin
 # plugin 'version' is a valid semantic version string (see semver.org).
-version: 0.5.0
+version: 0.6.0
 requires: ">=0.6.0"
 author:
   name: Ikaros OSS Team
