@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 
@@ -178,7 +179,7 @@ public class MediaDirInit {
         String fileName = file.getName();
 
         String epFileAbsolutePath = file.getFsPath();
-        if(epFileAbsolutePath == null) {
+        if (epFileAbsolutePath == null) {
             log.warn("skip link episode file, episode file path is null for file: {}", file);
             return;
         }
@@ -203,7 +204,7 @@ public class MediaDirInit {
                     targetEpisodeFile.getAbsolutePath(), epFileAbsolutePath, e);
             }
             // generate nfo file
-           Integer sequence = episode.getSequence();
+            Integer sequence = episode.getSequence();
             if (!episodeNfoFile.exists()) {
                 XmlUtils.generateJellyfinEpisodeNfoXml(episodeNfoFile.getAbsolutePath(),
                     episode.getDescription(),
@@ -216,52 +217,44 @@ public class MediaDirInit {
             }
 
             // link ass file if exists
-            String originalFileNameWithNoPostfix =
-                fileName.substring(0, fileName.indexOf("."));
-            log.debug("originalFileNameWithNoPostfix: {}", originalFileNameWithNoPostfix);
-            fileOperate.findAllByNameLikeAndType(originalFileNameWithNoPostfix,
-                    FileType.DOCUMENT)
-                .filter(
-                    entity -> {
-                        String fileEntityName = entity.getName();
-                        String postfix = fileEntityName.substring(fileEntityName.indexOf(".") + 1);
-                        boolean result = postfix.endsWith("ass");
-                        log.debug("fileEntityName: [{}], postfix: [{}], end with ass: [{}].",
-                            fileEntityName, postfix, result);
-                        return result;
-                    })
-                .subscribe(entity -> {
-                    String fsPath = entity.getFsPath();
-                    log.debug("ass file file system path: {}", fsPath);
-                    if (StringUtils.hasText(fsPath)) {
-                        File assFile = new File(fsPath);
-                        log.debug("ass file exists: {}", assFile.exists());
-                        if (assFile.exists()) {
-                            File targetAssFile = new File(subjectDirAbsolutePath
-                                + File.separatorChar + entity.getName());
-                            try {
-                                log.debug("targetAssFile exists: {}.", targetAssFile.exists());
-                                if (!targetAssFile.exists()) {
-                                    Files.createLink(targetAssFile.toPath(), assFile.toPath());
-                                    log.debug("create jellyfin episode subtitle hard link success, "
-                                            + "link={}, existing={}",
-                                        targetAssFile.getAbsolutePath(), fsPath);
-                                }
-                            } catch (IOException e) {
-                                log.debug("create jellyfin episode subtitle hard link fail, "
+            if (Objects.nonNull(episode.getResources()) && !episode.getResources().isEmpty()
+                && Objects.nonNull(episode.getResources().get(0))
+                && Objects.nonNull(episode.getResources().get(0).getSubtitles())
+                && !episode.getResources().get(0).getSubtitles().isEmpty()) {
+                List<Subtitle> subtitles = episode.getResources().get(0).getSubtitles();
+                for (Subtitle subtitle : subtitles) {
+                    String subtitleName = subtitle.getName();
+                    String url = subtitle.getUrl();
+                    String assFilePath = url.startsWith("http") ? "" : ikarosProperties.getWorkDir() + url;
+                    File assFile = new File(assFilePath);
+                    log.debug("ass file exists: {}", assFile.exists());
+                    if (assFile.exists()) {
+                        File targetAssFile = new File(subjectDirAbsolutePath
+                            + File.separatorChar + subtitleName);
+                        try {
+                            log.debug("targetAssFile exists: {}.", targetAssFile.exists());
+                            if (!targetAssFile.exists()) {
+                                Files.createLink(targetAssFile.toPath(), assFile.toPath());
+                                log.debug("create jellyfin episode subtitle hard link success, "
                                         + "link={}, existing={}",
-                                    targetAssFile.getAbsolutePath(), fsPath, e);
+                                    targetAssFile.getAbsolutePath(), subtitleName);
                             }
+                        } catch (IOException e) {
+                            log.debug("create jellyfin episode subtitle hard link fail, "
+                                    + "link={}, existing={}",
+                                targetAssFile.getAbsolutePath(), subtitleName, e);
                         }
                     }
-                });
+                }
+            }
+
         } else {
             // 剧集文件不存在，可能是已经推送到了远端
             // 如果此时媒体目录的剧集文件和nfo文件存在，则删除
-            if(targetEpisodeFile.exists()) {
+            if (targetEpisodeFile.exists()) {
                 targetEpisodeFile.delete();
             }
-            if(episodeNfoFile.exists()) {
+            if (episodeNfoFile.exists()) {
                 episodeNfoFile.delete();
             }
         }
