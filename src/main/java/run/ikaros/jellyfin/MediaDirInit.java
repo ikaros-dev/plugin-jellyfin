@@ -210,7 +210,7 @@ public class MediaDirInit {
                     episode.getDescription(),
                     StringUtils.hasText(episode.getNameCn()) ? episode.getNameCn() :
                         episode.getName(),
-                    EpisodeGroup.MAIN.name().equalsIgnoreCase(episode.getGroup()) ? "1" : "0",
+                    EpisodeGroup.MAIN.equals(episode.getGroup()) ? "1" : "0",
                     String.valueOf(DoubleUtils.castInt(sequence)), bgmTvIdOp.orElse(""));
                 log.debug("create episode nfo file, episode:[{}], nfo file path:[{}].",
                     episode.getName(), episodeNfoFile.getAbsolutePath());
