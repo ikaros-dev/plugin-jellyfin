@@ -5,25 +5,26 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Signal;
 import reactor.core.scheduler.Schedulers;
-import run.ikaros.api.core.file.FileOperate;
+import run.ikaros.api.core.attachment.*;
 import run.ikaros.api.core.subject.*;
 import run.ikaros.api.infra.properties.IkarosProperties;
 import run.ikaros.api.infra.utils.FileUtils;
+import run.ikaros.api.store.enums.AttachmentRelationType;
 import run.ikaros.api.store.enums.EpisodeGroup;
-import run.ikaros.api.store.enums.FileType;
 import run.ikaros.api.store.enums.SubjectSyncPlatform;
 import run.ikaros.api.wrap.PagingWrap;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,20 +33,25 @@ import lombok.extern.slf4j.Slf4j;
 public class MediaDirInit {
     private static final String MEDIA_DIR_NAME = "jellyfin";
     private final SubjectOperate subjectOperate;
-    private final FileOperate fileOperate;
+    private final AttachmentOperate attachmentOperate;
+    private final AttachmentReferenceOperate attachmentReferenceOperate;
+    private final AttachmentRelationOperate attachmentRelationOperate;
     private final IkarosProperties ikarosProperties;
     private final String workDirAbsolutePath;
 
-    public MediaDirInit(SubjectOperate subjectOperate, FileOperate fileOperate,
+    public MediaDirInit(SubjectOperate subjectOperate, AttachmentOperate attachmentOperate,
+                        AttachmentReferenceOperate attachmentReferenceOperate,
+                        AttachmentRelationOperate attachmentRelationOperate,
                         IkarosProperties ikarosProperties) {
         this.subjectOperate = subjectOperate;
-        this.fileOperate = fileOperate;
+        this.attachmentOperate = attachmentOperate;
+        this.attachmentReferenceOperate = attachmentReferenceOperate;
+        this.attachmentRelationOperate = attachmentRelationOperate;
         this.ikarosProperties = ikarosProperties;
         workDirAbsolutePath = ikarosProperties.getWorkDir().toFile().getAbsolutePath();
     }
 
 
-    // @EventListener(ApplicationReadyEvent.class)
     public Disposable generate() {
         return Flux.interval(Duration.ofMinutes(15))
             .doOnEach(tick -> generateJellyfinMediaDirAndFiles())
@@ -65,6 +71,7 @@ public class MediaDirInit {
         }
 
         subjectOperate.findAllByPageable(pagingWrap)
+            .flatMap(subjectMeta -> subjectOperate.findById(subjectMeta.getId()))
             .doOnEach(subjectSignal -> {
                 Subject subject = subjectSignal.get();
                 if (subject == null) {
@@ -158,29 +165,29 @@ public class MediaDirInit {
                 continue;
             }
             EpisodeResource episodeResource = episode.getResources().get(0);
-            Long fileId = episodeResource.getFileId();
-            fileOperate.findById(fileId).subscribe(file ->
-                linkEpisodeFileAndGenerateNfo(bgmTvIdOp, subjectDirAbsolutePath,
-                    workDirAbsolutePath, episode, file));
+            Long attachmentId = episodeResource.getAttachmentId();
+            attachmentOperate.findById(attachmentId).subscribe(attachment ->
+                linkEpisodeFileAndGenerateNfo(
+                    bgmTvIdOp, subjectDirAbsolutePath, episode, attachment));
 
         }
     }
 
     private void linkEpisodeFileAndGenerateNfo(Optional<String> bgmTvIdOp,
                                                String subjectDirAbsolutePath,
-                                               String workDirAbsolutePath,
                                                Episode episode,
-                                               run.ikaros.api.core.file.File file) {
-        if (file == null) {
-            log.warn("skip operate, file entity is null for episode: [{}].",
+                                               Attachment attachment) {
+        if (attachment == null) {
+            log.warn("skip operate, attachment is null for episode: [{}].",
                 episode.getName());
             return;
         }
-        String fileName = file.getName();
+        String fileName = attachment.getName();
 
-        String epFileAbsolutePath = file.getFsPath();
+        String epFileAbsolutePath = attachment.getFsPath();
         if (epFileAbsolutePath == null) {
-            log.warn("skip link episode file, episode file path is null for file: {}", file);
+            log.warn("skip link episode attachment, "
+                + "episode attachment ref not exists for attachment: {}", attachment);
             return;
         }
         File episodeFile = new File(epFileAbsolutePath);
@@ -217,36 +224,39 @@ public class MediaDirInit {
             }
 
             // link ass file if exists
-            if (Objects.nonNull(episode.getResources()) && !episode.getResources().isEmpty()
-                && Objects.nonNull(episode.getResources().get(0))
-                && Objects.nonNull(episode.getResources().get(0).getSubtitles())
-                && !episode.getResources().get(0).getSubtitles().isEmpty()) {
-                List<Subtitle> subtitles = episode.getResources().get(0).getSubtitles();
-                for (Subtitle subtitle : subtitles) {
-                    String subtitleName = subtitle.getName();
-                    String url = subtitle.getUrl();
-                    String assFilePath = url.startsWith("http") ? "" : ikarosProperties.getWorkDir() + url;
-                    File assFile = new File(assFilePath);
-                    log.debug("ass file exists: {}", assFile.exists());
-                    if (assFile.exists()) {
-                        File targetAssFile = new File(subjectDirAbsolutePath
-                            + File.separatorChar + subtitleName);
-                        try {
-                            log.debug("targetAssFile exists: {}.", targetAssFile.exists());
-                            if (!targetAssFile.exists()) {
-                                Files.createLink(targetAssFile.toPath(), assFile.toPath());
-                                log.debug("create jellyfin episode subtitle hard link success, "
+            Flux.fromStream(episode.getResources().stream())
+                .map(EpisodeResource::getAttachmentId)
+                .flatMap(attId -> attachmentRelationOperate.findAllByTypeAndAttachmentId(
+                        AttachmentRelationType.VIDEO_SUBTITLE, attId)
+                    .map(AttachmentRelation::getRelationAttachmentId)
+                    .flatMap(attachmentOperate::findById)
+                    .flatMap(subtitle -> {
+                        final String name = subtitle.getName();
+                        final String fsPath = subtitle.getFsPath();
+                        log.debug("ass file exists: {}", Files.exists(Path.of(fsPath)));
+                        if (Files.exists(Path.of(fsPath))) {
+                            File targetAssFile = new File(subjectDirAbsolutePath
+                                + File.separatorChar + name);
+                            try {
+                                log.debug("targetAssFile exists: {}.", targetAssFile.exists());
+                                if (!targetAssFile.exists()) {
+                                    Files.createLink(targetAssFile.toPath(), Path.of(fsPath));
+                                    log.debug("create jellyfin episode subtitle hard link success, "
+                                            + "link={}, existing={}",
+                                        targetAssFile.getAbsolutePath(), name);
+                                }
+                            } catch (IOException e) {
+                                log.debug("create jellyfin episode subtitle hard link fail, "
                                         + "link={}, existing={}",
-                                    targetAssFile.getAbsolutePath(), subtitleName);
+                                    targetAssFile.getAbsolutePath(), name, e);
                             }
-                        } catch (IOException e) {
-                            log.debug("create jellyfin episode subtitle hard link fail, "
-                                    + "link={}, existing={}",
-                                targetAssFile.getAbsolutePath(), subtitleName, e);
                         }
-                    }
-                }
-            }
+                        return Mono.just(subtitle);
+                    })
+                    .collectList()
+                )
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
 
         } else {
             // 剧集文件不存在，可能是已经推送到了远端
