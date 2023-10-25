@@ -15,6 +15,7 @@ import run.ikaros.api.infra.utils.FileUtils;
 import run.ikaros.api.store.enums.AttachmentRelationType;
 import run.ikaros.api.store.enums.EpisodeGroup;
 import run.ikaros.api.store.enums.SubjectSyncPlatform;
+import run.ikaros.api.store.enums.SubjectType;
 import run.ikaros.api.wrap.PagingWrap;
 
 import java.io.File;
@@ -71,6 +72,7 @@ public class MediaDirInit {
         }
 
         subjectOperate.findAllByPageable(pagingWrap)
+            .filter(subjectMeta -> SubjectType.ANIME.equals(subjectMeta.getType()))
             .flatMap(subjectMeta -> subjectOperate.findById(subjectMeta.getId()))
             .doOnEach(subjectSignal -> {
                 Subject subject = subjectSignal.get();
