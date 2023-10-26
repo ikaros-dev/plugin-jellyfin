@@ -193,6 +193,10 @@ public class MediaDirInit {
             return;
         }
         File episodeFile = new File(epFileAbsolutePath);
+        if (!episodeFile.exists() && StringUtils.hasText(attachment.getUrl())
+            && attachment.getUrl().startsWith("/file")) {
+            episodeFile = new File(ikarosProperties.getWorkDir() + attachment.getUrl());
+        }
         File targetEpisodeFile =
             new File(subjectDirAbsolutePath + File.separatorChar + fileName);
         File episodeNfoFile =
